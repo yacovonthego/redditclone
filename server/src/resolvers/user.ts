@@ -1,3 +1,4 @@
+import argon2 from "argon2";
 import { MyContext } from "src/types";
 import {
   Arg,
@@ -6,10 +7,10 @@ import {
   InputType,
   Mutation,
   ObjectType,
-  Resolver,
+  Query,
+  Resolver
 } from "type-graphql";
 import { UserEntity } from "../entities/User";
-import argon2 from "argon2";
 
 @InputType()
 class UserDataInput {
@@ -40,12 +41,23 @@ class UserResponse {
 
 @Resolver()
 export class UserResolver {
+  @Query(() => UserEntity, { nullable: true })
+  async me(@Ctx() { req, em }: MyContext): Promise<UserEntity | null> {
+    console.log(req.session);
+    if (!req.session.user) {
+      return null;
+    }
+
+    const user = await em.findOne(UserEntity, { _id: req.session.user.id });
+    return user;
+  }
+
   @Mutation(() => UserResponse)
   async register(
     @Arg("input", () => UserDataInput) input: UserDataInput,
     // @Arg("username") username: string,
     // @Arg("password") password: string,
-    @Ctx() { em }: MyContext
+    @Ctx() { req, em }: MyContext
   ): Promise<UserResponse> {
     if (input.username.length < 3)
       return {
@@ -62,7 +74,7 @@ export class UserResolver {
         errors: [
           {
             field: "password",
-            message: "Password should be at least 3 characters long",
+            message: "Password should be at least 3 characters long ",
           },
         ],
       };
@@ -87,23 +99,16 @@ export class UserResolver {
         };
       }
     }
+    // auto login cookie
+    req.session.user = { id: user._id };
     return { user };
   }
 
   @Mutation(() => UserResponse)
   async login(
     @Arg("input", () => UserDataInput) input: UserDataInput,
-    // @Arg("username") username: string,
-    // @Arg("password") password: string,
-    @Ctx() { em }: MyContext
+    @Ctx() { em, req }: MyContext
   ): Promise<UserResponse> {
-    // try {
-
-    //   await em.persistAndFlush(user);
-    //   return user;
-    // } catch (err) {
-    //   return null;
-    // }
     const user = await em.findOne(UserEntity, {
       username: input.username,
     });
@@ -128,6 +133,7 @@ export class UserResolver {
         ],
       };
     }
+    req.session.user = { id: user._id };
 
     return {
       user,
