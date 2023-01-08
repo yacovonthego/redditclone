@@ -1,0 +1,4 @@
+fragment RegularUser on UserEntity {
+  _id
+  username
+}

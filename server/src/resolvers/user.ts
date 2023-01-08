@@ -1,5 +1,6 @@
 import argon2 from "argon2";
-import { MyContext } from "src/types";
+import { COOKIE_NAME } from "../constants";
+import { MyContext } from "../types";
 import {
   Arg,
   Ctx,
@@ -8,7 +9,7 @@ import {
   Mutation,
   ObjectType,
   Query,
-  Resolver
+  Resolver,
 } from "type-graphql";
 import { UserEntity } from "../entities/User";
 
@@ -43,7 +44,6 @@ class UserResponse {
 export class UserResolver {
   @Query(() => UserEntity, { nullable: true })
   async me(@Ctx() { req, em }: MyContext): Promise<UserEntity | null> {
-    console.log(req.session);
     if (!req.session.user) {
       return null;
     }
@@ -55,8 +55,6 @@ export class UserResolver {
   @Mutation(() => UserResponse)
   async register(
     @Arg("input", () => UserDataInput) input: UserDataInput,
-    // @Arg("username") username: string,
-    // @Arg("password") password: string,
     @Ctx() { req, em }: MyContext
   ): Promise<UserResponse> {
     if (input.username.length < 3)
@@ -87,7 +85,7 @@ export class UserResolver {
     try {
       await em.persistAndFlush(user);
     } catch (err) {
-      if (err.code === "23505" || err.detail.includes("already exists")) {
+      if (err.detail.includes("already exists")) {
         // duplicate username
         return {
           errors: [
@@ -138,5 +136,20 @@ export class UserResolver {
     return {
       user,
     };
+  }
+
+  @Mutation(() => Boolean)
+  async logout(@Ctx() { req, res }: MyContext): Promise<Boolean> {
+    return new Promise((resolve) =>
+      req.session.destroy((err) => {
+        res.clearCookie(COOKIE_NAME);
+        if (err) {
+          console.log(err);
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      })
+    );
   }
 }

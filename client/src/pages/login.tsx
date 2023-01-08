@@ -1,29 +1,29 @@
 import { Box, Button } from "@chakra-ui/react";
 import { Form, Formik } from "formik";
+import { withUrqlClient } from "next-urql";
 import { useRouter } from "next/router";
 import React from "react";
 import InputField from "../components/InputField";
 import Wrapper from "../components/Wrapper";
-import { useRegisterMutation } from "../generated/graphql";
-import ToErrorMap from "../utils/toErrorMap";
+import { useLoginMutation } from "../generated/graphql";
 import CreateUrqlClient from "../utils/createUrqlClient";
-import { withUrqlClient } from "next-urql";
+import ToErrorMap from "../utils/toErrorMap";
 
-interface RegisterProps {}
+interface LoginProps {}
 
-const Register: React.FC<RegisterProps> = ({}) => {
-  const [, register] = useRegisterMutation();
+const Login: React.FC<LoginProps> = ({}) => {
+  const [, login] = useLoginMutation();
   const router = useRouter();
   return (
     <Wrapper variant="small">
       <Formik
         initialValues={{ username: "", password: "" }}
         onSubmit={async (value, { setErrors }) => {
-          const response = await register(value);
-          if (response.data?.register.errors) {
-            const formatErrors = ToErrorMap(response.data.register.errors);
+          const response = await login(value);
+          if (response.data?.login.errors) {
+            const formatErrors = ToErrorMap(response.data.login.errors);
             setErrors(formatErrors);
-          } else if (response.data?.register.user) {
+          } else if (response.data?.login.user) {
             // logged in
             router.push("/");
           }
@@ -50,7 +50,7 @@ const Register: React.FC<RegisterProps> = ({}) => {
                 isLoading={isSubmitting}
                 type="submit"
               >
-                Register
+                Login
               </Button>
             </Box>
           </Form>
@@ -59,4 +59,4 @@ const Register: React.FC<RegisterProps> = ({}) => {
     </Wrapper>
   );
 };
-export default withUrqlClient(CreateUrqlClient)(Register);
+export default withUrqlClient(CreateUrqlClient)(Login);

@@ -6,16 +6,12 @@ import express from "express";
 import session from "express-session";
 import { createClient } from "redis";
 import { buildSchema } from "type-graphql";
-import { __prod__ } from "./constants";
+import { COOKIE_NAME, __prod__ } from "./constants";
 import config from "./mikro-orm.config";
 import { HelloResolver } from "./resolvers/hello";
 import { PostResolver } from "./resolvers/post";
 import { UserResolver } from "./resolvers/user";
 import { MyContext } from "./types";
-
-const CORS_OPTIONS = {
-  credentials: true,
-};
 
 const main = async () => {
   const RedisStore = connectRedis(session);
@@ -28,13 +24,18 @@ const main = async () => {
   const orm = await MikroORM.init(config);
   await orm.getMigrator().up();
   const em = orm.em.fork();
-
   const app = express();
-  app.use(cors(CORS_OPTIONS));
+  app.use(
+    cors({
+      maxAge: 84600,
+      credentials: true,
+      origin: "http://localhost:3000",
+    })
+  );
   app.set("trust proxy", 1);
   app.use(
     session({
-      name: "qid",
+      name: COOKIE_NAME,
       saveUninitialized: true,
       store: new RedisStore({
         client: redisClient,
@@ -62,10 +63,11 @@ const main = async () => {
   await apoloServer.start();
   apoloServer.applyMiddleware({
     app,
+    cors: false
   });
 
-  app.listen("4000", () => {
-    console.log("server started on localhost:4000");
+  app.listen("8080", () => {
+    console.log("server started on localhost:8080");
   });
 };
 
