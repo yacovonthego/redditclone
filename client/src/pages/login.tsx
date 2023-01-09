@@ -1,23 +1,22 @@
-import { Box, Button } from "@chakra-ui/react";
+import { Box, Button, Flex, Link } from "@chakra-ui/react";
 import { Form, Formik } from "formik";
+import { NextPage } from "next";
 import { withUrqlClient } from "next-urql";
+import NextLink from "next/link";
 import { useRouter } from "next/router";
-import React from "react";
 import InputField from "../components/InputField";
 import Wrapper from "../components/Wrapper";
 import { useLoginMutation } from "../generated/graphql";
 import CreateUrqlClient from "../utils/createUrqlClient";
 import ToErrorMap from "../utils/toErrorMap";
 
-interface LoginProps {}
-
-const Login: React.FC<LoginProps> = ({}) => {
+const Login: NextPage = ({}) => {
   const [, login] = useLoginMutation();
   const router = useRouter();
   return (
     <Wrapper variant="small">
       <Formik
-        initialValues={{ username: "", password: "" }}
+        initialValues={{ usernameOrEmail: "", password: "" }}
         onSubmit={async (value, { setErrors }) => {
           const response = await login(value);
           if (response.data?.login.errors) {
@@ -32,9 +31,9 @@ const Login: React.FC<LoginProps> = ({}) => {
         {({ isSubmitting }) => (
           <Form>
             <InputField
-              name={"username"}
-              placeholder={"username"}
-              label={"Username"}
+              name={"usernameOrEmail"}
+              placeholder={"username or email"}
+              label={"Username or Email"}
             />
             <Box mt={4}>
               <InputField
@@ -44,6 +43,9 @@ const Login: React.FC<LoginProps> = ({}) => {
                 type="password"
               />
             </Box>
+            <NextLink href={"/forgot-password"}>
+              <Link>forgot?</Link>
+            </NextLink>
             <Box mt={4}>
               <Button
                 colorScheme={"teal"}

@@ -4,7 +4,7 @@ import connectRedis from "connect-redis";
 import cors from "cors";
 import express from "express";
 import session from "express-session";
-import { createClient } from "redis";
+import Redis from "ioredis";
 import { buildSchema } from "type-graphql";
 import { COOKIE_NAME, __prod__ } from "./constants";
 import config from "./mikro-orm.config";
@@ -14,12 +14,15 @@ import { UserResolver } from "./resolvers/user";
 import { MyContext } from "./types";
 
 const main = async () => {
+  // sendEmail('bob@bob.ru', 'hello brother')
   const RedisStore = connectRedis(session);
-  const redisClient = createClient({
-    legacyMode: true,
-  });
+  const redis = new Redis();
 
-  await redisClient.connect();
+  // const redisClient = createClient({
+  //   legacyMode: true,
+  // });
+
+  // await redisClient.connect();
 
   const orm = await MikroORM.init(config);
   await orm.getMigrator().up();
@@ -38,7 +41,7 @@ const main = async () => {
       name: COOKIE_NAME,
       saveUninitialized: true,
       store: new RedisStore({
-        client: redisClient,
+        client: redis,
         disableTouch: true,
       }),
       cookie: {
@@ -57,13 +60,13 @@ const main = async () => {
       resolvers: [HelloResolver, PostResolver, UserResolver],
       validate: false,
     }),
-    context: ({ req, res }): MyContext => ({ em, req, res }),
+    context: ({ req, res }): MyContext => ({ em, req, res, redis }),
   });
 
   await apoloServer.start();
   apoloServer.applyMiddleware({
     app,
-    cors: false
+    cors: false,
   });
 
   app.listen("8080", () => {

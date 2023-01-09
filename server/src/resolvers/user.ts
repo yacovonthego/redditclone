@@ -1,26 +1,20 @@
 import argon2 from "argon2";
-import { COOKIE_NAME } from "../constants";
-import { MyContext } from "../types";
 import {
   Arg,
   Ctx,
   Field,
-  InputType,
   Mutation,
   ObjectType,
   Query,
   Resolver,
 } from "type-graphql";
+import { COOKIE_NAME, FORGOT_PASSWORD_PREFIX } from "../constants";
 import { UserEntity } from "../entities/User";
-
-@InputType()
-class UserDataInput {
-  @Field(() => String)
-  username: string;
-
-  @Field(() => String)
-  password: string;
-}
+import { MyContext } from "../types";
+import { sendEmail } from "../utils/sendEmail";
+import ValidateRegister from "../utils/validateRegister";
+import { UserDataInput } from "./UserDataInput";
+import { v4 } from "uuid";
 
 @ObjectType()
 class FieldError {
@@ -52,33 +46,40 @@ export class UserResolver {
     return user;
   }
 
+  @Mutation(() => Boolean)
+  async forgotPassword(
+    @Arg("email") email: string,
+    @Ctx() { em, redis }: MyContext
+  ): Promise<Boolean> {
+    const user = await em.findOne(UserEntity, { email });
+    if (!user) return true;
+    const token = v4();
+
+    await redis.set(
+      FORGOT_PASSWORD_PREFIX + token,
+      user._id,
+      "EX",
+      1000 * 60 * 24 * 3
+    ); // 3 days
+
+    await sendEmail(
+      email,
+      `<a href="http://localhost:3000/change-password/${token}">reset password</a>`
+    );
+    return true;
+  }
+
   @Mutation(() => UserResponse)
   async register(
     @Arg("input", () => UserDataInput) input: UserDataInput,
     @Ctx() { req, em }: MyContext
   ): Promise<UserResponse> {
-    if (input.username.length < 3)
-      return {
-        errors: [
-          {
-            field: "username",
-            message: "Username should be at least 3 characters long",
-          },
-        ],
-      };
-
-    if (input.password.length < 3)
-      return {
-        errors: [
-          {
-            field: "password",
-            message: "Password should be at least 3 characters long ",
-          },
-        ],
-      };
+    const errors = ValidateRegister(input);
+    if (errors) return { errors };
 
     const hashedPassword = await argon2.hash(input.password);
     const user = em.create(UserEntity, {
+      email: input.email,
       username: input.username,
       password: hashedPassword,
     } as UserEntity);
@@ -103,24 +104,77 @@ export class UserResolver {
   }
 
   @Mutation(() => UserResponse)
+  async changePassword(
+    @Arg("token") token: string,
+    @Arg("newPassword") newPassword: string,
+    @Ctx() { em, redis }: MyContext
+  ): Promise<UserResponse> {
+    if (newPassword.length < 3)
+      return {
+        errors: [
+          {
+            field: "newPassword",
+            message: "New password should be at least 3 characters long ",
+          },
+        ],
+      };
+
+    const redisKey = FORGOT_PASSWORD_PREFIX + token;
+    const userId = await redis.get(redisKey);
+
+    if (!userId)
+      return {
+        errors: [
+          {
+            field: "token",
+            message: "bad token",
+          },
+        ],
+      };
+
+    const user = await em.findOne(UserEntity, { _id: +userId });
+
+    if (!user)
+      return {
+        errors: [
+          {
+            field: "token",
+            message: "user not existent",
+          },
+        ],
+      };
+
+    user.password = await argon2.hash(newPassword);
+    await em.persistAndFlush(user);
+
+    await redis.del(redisKey);
+
+    return { user };
+  }
+
+  @Mutation(() => UserResponse)
   async login(
-    @Arg("input", () => UserDataInput) input: UserDataInput,
+    @Arg("usernameOrEmail") usernameOrEmail: string,
+    @Arg("password") password: string,
     @Ctx() { em, req }: MyContext
   ): Promise<UserResponse> {
-    const user = await em.findOne(UserEntity, {
-      username: input.username,
-    });
+    const user = await em.findOne(
+      UserEntity,
+      usernameOrEmail.includes("@")
+        ? { email: usernameOrEmail }
+        : { username: usernameOrEmail }
+    );
     if (!user) {
       return {
         errors: [
           {
-            field: "username",
-            message: "Username doesn't exist",
+            field: "usernameOrEmail",
+            message: "Username or Email doesn't exist",
           },
         ],
       };
     }
-    const valid = await argon2.verify(user.password, input.password);
+    const valid = await argon2.verify(user.password, password);
     if (!valid) {
       return {
         errors: [
